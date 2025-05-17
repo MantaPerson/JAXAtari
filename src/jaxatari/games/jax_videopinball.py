@@ -28,16 +28,19 @@ HEIGHT = 210
 
 # Physics constants
 # TODO: check if these are correct
-GRAVITY = 3  # 0.12
-BALL_MAX_SPEED = 6.0
+GRAVITY = 1  # 0.12
+VELOCITY_DAMPENING_VALUE = 0  # 24
+BALL_MAX_SPEED = 16.0
 FLIPPER_MAX_ANGLE = 3
-FLIPPER_ANIMATION_Y_OFFSETS = jnp.array([0, 0, 3, 7]) # This is a little scuffed, it would be cleaner to just fix the sprites but this works fine
-FLIPPER_ANIMATION_X_OFFSETS = jnp.array([0, 0, 0, 1]) # Only for the right flipper
+FLIPPER_ANIMATION_Y_OFFSETS = jnp.array(
+    [0, 0, 3, 7]
+)  # This is a little scuffed, it would be cleaner to just fix the sprites but this works fine
+FLIPPER_ANIMATION_X_OFFSETS = jnp.array([0, 0, 0, 1])  # Only for the right flipper
 PLUNGER_MAX_POSITION = 20
 
 # Game logic constants
 T_ENTRY_NO_COLLISION = 9999
-VELOCITY_RETENTION_FACTOR = 1.
+VELOCITY_RETENTION_FACTOR = 1.0
 
 # Game layout constants
 # TODO: check if these are correct
@@ -46,6 +49,9 @@ FLIPPER_LEFT_POS = (30, 180)
 FLIPPER_RIGHT_POS = (110, 180)
 PLUNGER_POS = (150, 120)
 PLUNGER_MAX_HEIGHT = 20  # Taken from RAM values (67-87)
+INVISIBLE_BLOCK_REFLECTION_FACTOR = (
+    2  # 8 times the plunger power is added to ball_vel_x
+)
 
 
 # Background color and object colors
@@ -60,9 +66,9 @@ WINDOW_WIDTH = 160 * 3
 WINDOW_HEIGHT = 210 * 3
 
 
-# Positions/dimensions 
-BALL_START_X = jnp.array(149)
-BALL_START_Y = jnp.array(129)
+# Positions/dimensions
+BALL_START_X = jnp.array(149.0)
+BALL_START_Y = jnp.array(129.0)
 BALL_START_DIRECTION = jnp.array(0)
 
 GAME_BOTTOM_Y = 191
@@ -72,7 +78,33 @@ TOP_WALL_TOP_Y_OFFSET = 16
 RIGHT_WALL_LEFT_X_OFFSET = 152
 BOTTOM_WALL_TOP_Y_OFFSET = 184
 
+INVISIBLE_BLOCK_LEFT_X_OFFSET = 149
+INVISIBLE_BLOCK_TOP_Y_OFFSET = 36
+
+INNER_WALL_TOP_Y_OFFSET = 56
+LEFT_INNER_WALL_TOP_X_OFFSET = 12
+RIGHT_INNER_WALL_TOP_X_OFFSET = 144
+
+QUADRUPLE_STEP_Y_OFFSET = 152
+TRIPLE_STEP_Y_OFFSET = 160
+DOUBLE_STEP_Y_OFFSET = 168
+SINGLE_STEP_Y_OFFSET = 176
+
+LEFT_QUADRUPLE_STEP_X_OFFSET = 16
+RIGHT_QUADRUPLE_STEP_X_OFFSET = 140
+LEFT_TRIPLE_STEP_X_OFFSET = 20
+RIGHT_TRIPLE_STEP_X_OFFSET = 136
+LEFT_DOUBLE_STEP_X_OFFSET = 24
+RIGHT_DOUBLE_STEP_X_OFFSET = 132
+LEFT_SINGLE_STEP_X_OFFSET = 28
+RIGHT_SINGLE_STEP_X_OFFSET = 128
+
 OUTER_WALL_THICKNESS = 8
+INNER_WALL_THICKNESS = 4
+WALL_CORNER_BLOCK_WIDTH = 4
+WALL_CORNER_BLOCK_HEIGHT = 8
+STEP_HEIGHT = 8
+STEP_WIDTH = 4
 
 TOP_WALL_BOUNDING_BOX = jnp.ones((OUTER_WALL_THICKNESS, 160)).astype(jnp.bool)
 TOP_WALL_OFFSET = jnp.array([TOP_WALL_LEFT_X_OFFSET, TOP_WALL_TOP_Y_OFFSET])
@@ -86,14 +118,52 @@ LEFT_WALL_OFFSET = jnp.array([TOP_WALL_LEFT_X_OFFSET, TOP_WALL_TOP_Y_OFFSET])
 RIGHT_WALL_BOUNDING_BOX = jnp.ones((176, OUTER_WALL_THICKNESS)).astype(jnp.bool)
 RIGHT_WALL_OFFSET = jnp.array([RIGHT_WALL_LEFT_X_OFFSET, TOP_WALL_TOP_Y_OFFSET])
 
+LEFT_INNER_WALL_OFFSET = jnp.array(
+    [LEFT_INNER_WALL_TOP_X_OFFSET, INNER_WALL_TOP_Y_OFFSET]
+)
+LEFT_INNER_WALL_BOUNDING_BOX = jnp.ones((135, INNER_WALL_THICKNESS)).astype(
+    jnp.bool
+)  # 135 = 191 - 56 (height of inner wall)
 
-WALL_CORNER_BLOCK_WIDTH = 4
-WALL_CORNER_BLOCK_HEIGHT = 8
+RIGHT_INNER_WALL_OFFSET = jnp.array(
+    [RIGHT_INNER_WALL_TOP_X_OFFSET, INNER_WALL_TOP_Y_OFFSET]
+)
+RIGHT_INNER_WALL_BOUNDING_BOX = jnp.ones((135, INNER_WALL_THICKNESS)).astype(
+    jnp.bool
+)  # 135 = 191 - 56 (height of inner wall)
 
-INNER_WALL_TOP_Y = 56
-INNER_WALL_TOP_X = 12
+QUADRUPLE_STEP_BOUNDING_BOX = jnp.ones((4 * STEP_HEIGHT, STEP_WIDTH)).astype(
+    jnp.bool
+)  # (4*8) x 4
+LEFT_QUADRUPLE_STEP_OFFSET = jnp.array(
+    [LEFT_QUADRUPLE_STEP_X_OFFSET, QUADRUPLE_STEP_Y_OFFSET]
+)
+RIGHT_QUADRUPLE_STEP_OFFSET = jnp.array(
+    [RIGHT_QUADRUPLE_STEP_X_OFFSET, QUADRUPLE_STEP_Y_OFFSET]
+)
 
-INNER_WALL_THICKNESS = 4
+TRIPLE_STEP_BOUNDING_BOX = jnp.ones((3 * STEP_HEIGHT, STEP_WIDTH)).astype(
+    jnp.bool
+)  # (3*8) x 4
+LEFT_TRIPLE_STEP_OFFSET = jnp.array([LEFT_TRIPLE_STEP_X_OFFSET, TRIPLE_STEP_Y_OFFSET])
+RIGHT_TRIPLE_STEP_OFFSET = jnp.array([RIGHT_TRIPLE_STEP_X_OFFSET, TRIPLE_STEP_Y_OFFSET])
+
+DOUBLE_STEP_BOUNDING_BOX = jnp.ones((2 * STEP_HEIGHT, STEP_WIDTH)).astype(
+    jnp.bool
+)  # (2*8) x 4
+LEFT_DOUBLE_STEP_OFFSET = jnp.array([LEFT_DOUBLE_STEP_X_OFFSET, DOUBLE_STEP_Y_OFFSET])
+RIGHT_DOUBLE_STEP_OFFSET = jnp.array([RIGHT_DOUBLE_STEP_X_OFFSET, DOUBLE_STEP_Y_OFFSET])
+
+SINGLE_STEP_BOUNDING_BOX = jnp.ones((1 * STEP_HEIGHT, STEP_WIDTH)).astype(
+    jnp.bool
+)  # (1*8) x 4
+LEFT_SINGLE_STEP_OFFSET = jnp.array([LEFT_SINGLE_STEP_X_OFFSET, SINGLE_STEP_Y_OFFSET])
+RIGHT_SINGLE_STEP_OFFSET = jnp.array([RIGHT_SINGLE_STEP_X_OFFSET, SINGLE_STEP_Y_OFFSET])
+
+INVISIBLE_BLOCK_BOUNDING_BOX = jnp.ones((2, INNER_WALL_THICKNESS)).astype(jnp.bool)
+INVISIBLE_BLOCK_OFFSET = jnp.array(
+    [INVISIBLE_BLOCK_LEFT_X_OFFSET, INVISIBLE_BLOCK_TOP_Y_OFFSET]
+)
 
 MIDDLE_BAR_Y = 72
 MIDDLE_BAR_X = 104
@@ -113,7 +183,16 @@ class SceneObject:
     hit_box_matrix: chex.Array
     hit_box_offset: chex.Array
     reflecting: chex.Array  # 0: no reflection, 1: reflection
-    horizontal: chex.Array # 0: vertical, 1: horizontal
+    horizontal: chex.Array  # 0: vertical, 1: horizontal
+
+
+INVISIBLE_BLOCK_SCENE_OBJECT = SceneObject(
+    hit_box_matrix=INVISIBLE_BLOCK_BOUNDING_BOX,
+    hit_box_offset=INVISIBLE_BLOCK_OFFSET,
+    reflecting=jnp.array(1),
+    horizontal=jnp.array(1),
+)
+
 
 TOP_WALL_SCENE_OBJECT = SceneObject(
     hit_box_matrix=TOP_WALL_BOUNDING_BOX,
@@ -140,11 +219,85 @@ RIGHT_WALL_SCENE_OBJECT = SceneObject(
     horizontal=jnp.array(0),
 )
 
+LEFT_INNER_WALL_SCENE_OBJECT = SceneObject(
+    hit_box_matrix=LEFT_INNER_WALL_BOUNDING_BOX,
+    hit_box_offset=LEFT_INNER_WALL_OFFSET,
+    reflecting=jnp.array(1),
+    horizontal=jnp.array(0),
+)
+
+RIGHT_INNER_WALL_SCENE_OBJECT = SceneObject(
+    hit_box_matrix=RIGHT_INNER_WALL_BOUNDING_BOX,
+    hit_box_offset=RIGHT_INNER_WALL_OFFSET,
+    reflecting=jnp.array(1),
+    horizontal=jnp.array(0),
+)
+
+LEFT_QUADRUPLE_STEP_SCENE_OBJECT = SceneObject(
+    hit_box_matrix=QUADRUPLE_STEP_BOUNDING_BOX,
+    hit_box_offset=LEFT_QUADRUPLE_STEP_OFFSET,
+    reflecting=jnp.array(1),
+    horizontal=jnp.array(0),
+)
+RIGHT_QUADRUPLE_STEP_SCENE_OBJECT = SceneObject(
+    hit_box_matrix=QUADRUPLE_STEP_BOUNDING_BOX,
+    hit_box_offset=RIGHT_QUADRUPLE_STEP_OFFSET,
+    reflecting=jnp.array(1),
+    horizontal=jnp.array(0),
+)
+LEFT_TRIPLE_STEP_SCENE_OBJECT = SceneObject(
+    hit_box_matrix=TRIPLE_STEP_BOUNDING_BOX,
+    hit_box_offset=LEFT_TRIPLE_STEP_OFFSET,
+    reflecting=jnp.array(1),
+    horizontal=jnp.array(0),
+)
+RIGHT_TRIPLE_STEP_SCENE_OBJECT = SceneObject(
+    hit_box_matrix=TRIPLE_STEP_BOUNDING_BOX,
+    hit_box_offset=RIGHT_TRIPLE_STEP_OFFSET,
+    reflecting=jnp.array(1),
+    horizontal=jnp.array(0),
+)
+LEFT_DOUBLE_STEP_SCENE_OBJECT = SceneObject(
+    hit_box_matrix=DOUBLE_STEP_BOUNDING_BOX,
+    hit_box_offset=LEFT_DOUBLE_STEP_OFFSET,
+    reflecting=jnp.array(1),
+    horizontal=jnp.array(0),
+)
+RIGHT_DOUBLE_STEP_SCENE_OBJECT = SceneObject(
+    hit_box_matrix=DOUBLE_STEP_BOUNDING_BOX,
+    hit_box_offset=RIGHT_DOUBLE_STEP_OFFSET,
+    reflecting=jnp.array(1),
+    horizontal=jnp.array(0),
+)
+LEFT_SINGLE_STEP_SCENE_OBJECT = SceneObject(
+    hit_box_matrix=SINGLE_STEP_BOUNDING_BOX,
+    hit_box_offset=LEFT_SINGLE_STEP_OFFSET,
+    reflecting=jnp.array(1),
+    horizontal=jnp.array(0),
+)
+RIGHT_SINGLE_STEP_SCENE_OBJECT = SceneObject(
+    hit_box_matrix=SINGLE_STEP_BOUNDING_BOX,
+    hit_box_offset=RIGHT_SINGLE_STEP_OFFSET,
+    reflecting=jnp.array(1),
+    horizontal=jnp.array(0),
+)
+
 REFLECTING_SCENE_OBJECT_LIST = [
     TOP_WALL_SCENE_OBJECT,
     BOTTOM_WALL_SCENE_OBJECT,
     LEFT_WALL_SCENE_OBJECT,
     RIGHT_WALL_SCENE_OBJECT,
+    LEFT_INNER_WALL_SCENE_OBJECT,
+    RIGHT_INNER_WALL_SCENE_OBJECT,
+    LEFT_QUADRUPLE_STEP_SCENE_OBJECT,
+    RIGHT_QUADRUPLE_STEP_SCENE_OBJECT,
+    LEFT_TRIPLE_STEP_SCENE_OBJECT,
+    RIGHT_TRIPLE_STEP_SCENE_OBJECT,
+    LEFT_DOUBLE_STEP_SCENE_OBJECT,
+    RIGHT_DOUBLE_STEP_SCENE_OBJECT,
+    LEFT_SINGLE_STEP_SCENE_OBJECT,
+    RIGHT_SINGLE_STEP_SCENE_OBJECT,
+    # INVISIBLE_BLOCK_SCENE_OBJECT,
 ]
 # SCENE_OBJECTS_STACKED = SceneObject(
 #     hit_box_matrix=jnp.stack([obj.hit_box_matrix for obj in SCENE_OBJECT_LIST]),
@@ -169,6 +322,14 @@ STATE_TRANSLATOR: dict = {
     12: "step_counter",
     13: "ball_in_play",
 }
+
+
+# Todo: Switch to a data class
+@chex.dataclass
+class HitPoint:
+    t_entry: chex.Array
+    x: chex.Array
+    y: chex.Array
 
 
 def get_human_action() -> chex.Array:
@@ -207,6 +368,9 @@ class VideoPinballState(NamedTuple):
     plunger_position: (
         chex.Array
     )  # Value between 0 and 20 where 20 means that the plunger is fully pulled
+    plunger_power: (
+        chex.Array
+    )  # 2 * plunger_position, only set to non-zero value once fired, reset after hitting invisible block
     score: chex.Array
     lives: chex.Array
     bonus_multiplier: chex.Array
@@ -273,16 +437,13 @@ def plunger_step(state: VideoPinballState, action: chex.Array) -> chex.Array:
     # If FIRE
     plunger_power = jax.lax.cond(
         jnp.logical_and(action == Action.FIRE, jnp.logical_not(state.ball_in_play)),
-        lambda s: s * 2,
-        lambda s: 0,
+        lambda s: jnp.round(s / PLUNGER_MAX_POSITION * BALL_MAX_SPEED),
+        lambda s: 0.0,
         operand=plunger_position,
     )
 
     plunger_position = jax.lax.cond(
-        plunger_power > 0,
-        lambda p: 0,
-        lambda p: p,
-        operand=plunger_position
+        plunger_power > 0, lambda p: 0, lambda p: p, operand=plunger_position
     )
 
     return plunger_position, plunger_power
@@ -366,13 +527,13 @@ def _calc_hit_point(
     tx1 = (scene_object.hit_box_offset[0] - ball_movement.old_ball_x) / trajectory_x
     tx2 = (
         scene_object.hit_box_offset[0]
-        + scene_object.hit_box_matrix.shape[-2]
+        + scene_object.hit_box_matrix.shape[1]
         - ball_movement.old_ball_x
     ) / trajectory_x
     ty1 = (scene_object.hit_box_offset[1] - ball_movement.old_ball_y) / trajectory_y
     ty2 = (
         scene_object.hit_box_offset[1]
-        + scene_object.hit_box_matrix.shape[-1]
+        + scene_object.hit_box_matrix.shape[0]
         - ball_movement.old_ball_y
     ) / trajectory_y
 
@@ -399,7 +560,9 @@ def _calc_hit_point(
     )
 
     return jax.lax.cond(
-        no_collision, lambda: jnp.array([T_ENTRY_NO_COLLISION, -1., -1.]), lambda: hit_point
+        no_collision,
+        lambda: jnp.array([T_ENTRY_NO_COLLISION, -1.0, -1.0]),
+        lambda: hit_point,
     )
 
 
@@ -407,7 +570,7 @@ def _calc_hit_point(
 def _reflect_ball(
     ball_movement: BallMovement,
     hit_point: chex.Array,
-    scene_object_horizontal: chex.Array
+    scene_object_horizontal: chex.Array,
 ) -> tuple[chex.Array]:
     """
     From the previous ball position, a hit point, the ball_direction, and the velocity,
@@ -417,29 +580,26 @@ def _reflect_ball(
     velocity_x = ball_movement.new_ball_x - ball_movement.old_ball_x
     velocity_y = ball_movement.new_ball_y - ball_movement.old_ball_y
 
+    # Calculate the trajectory of the ball to the hit point
     trajectory_to_hit_point_x = ball_movement.new_ball_x - hit_point[1]
     trajectory_to_hit_point_y = ball_movement.new_ball_y - hit_point[2]
 
-    surface_normal_x = jnp.where(
-        scene_object_horizontal,
-        jnp.array(0),
-        jnp.array(1)
-    )
-    surface_normal_y = jnp.where(
-        scene_object_horizontal,
-        jnp.array(1),
-        jnp.array(0)
-    )
+    # Calculate the surface normal of the hit point
+    surface_normal_x = jnp.where(scene_object_horizontal, jnp.array(0), jnp.array(1))
+    surface_normal_y = jnp.where(scene_object_horizontal, jnp.array(1), jnp.array(0))
 
+    # Calculate the dot product of the velocity and the surface normal
     velocity_normal_prod = velocity_x * surface_normal_x + velocity_y * surface_normal_y
+    velocity_normal_prod = (
+        velocity_normal_prod - VELOCITY_DAMPENING_VALUE
+    )  # Dampen the velocity a bit (value taken from RAM values)
 
     reflected_velocity_x = velocity_x - 2 * velocity_normal_prod * surface_normal_x
     reflected_velocity_y = velocity_y - 2 * velocity_normal_prod * surface_normal_y
 
-    reflected_velocity_x = reflected_velocity_x * VELOCITY_RETENTION_FACTOR
-    reflected_velocity_y = reflected_velocity_y * VELOCITY_RETENTION_FACTOR
-
-    d_hit_point = jnp.sqrt(jnp.square(trajectory_to_hit_point_x) + jnp.square(trajectory_to_hit_point_y))
+    d_hit_point = jnp.sqrt(
+        jnp.square(trajectory_to_hit_point_x) + jnp.square(trajectory_to_hit_point_y)
+    )
     d_trajectory = jnp.sqrt(jnp.square(velocity_x) + jnp.square(velocity_y))
 
     r = d_hit_point / d_trajectory
@@ -447,8 +607,7 @@ def _reflect_ball(
     new_ball_x = hit_point[1] + r * reflected_velocity_x
     new_ball_y = hit_point[2] + r * reflected_velocity_y
 
-    return jnp.round(new_ball_x), jnp.round(new_ball_y), reflected_velocity_x, reflected_velocity_y
-
+    return jnp.round(new_ball_x), jnp.round(new_ball_y)
 
 
 @jax.jit
@@ -469,17 +628,32 @@ def _check_reflecting_obstacle_hits(
     # rollovers (left & atari)
     # spinner
     """
-    hit_points = jnp.stack([
-        _calc_hit_point(ball_movement, TOP_WALL_SCENE_OBJECT),
-        _calc_hit_point(ball_movement, RIGHT_WALL_SCENE_OBJECT),
-        _calc_hit_point(ball_movement, BOTTOM_WALL_SCENE_OBJECT),
-        _calc_hit_point(ball_movement, LEFT_WALL_SCENE_OBJECT)
-    ], axis=0)
+    # Jax should be able to optimize this (?) (also with a for loop ???)
+    hit_points = jnp.stack(
+        [
+            _calc_hit_point(ball_movement, TOP_WALL_SCENE_OBJECT),
+            _calc_hit_point(ball_movement, RIGHT_WALL_SCENE_OBJECT),
+            _calc_hit_point(ball_movement, BOTTOM_WALL_SCENE_OBJECT),
+            _calc_hit_point(ball_movement, LEFT_WALL_SCENE_OBJECT),
+            _calc_hit_point(ball_movement, LEFT_INNER_WALL_SCENE_OBJECT),
+            _calc_hit_point(ball_movement, RIGHT_INNER_WALL_SCENE_OBJECT),
+            _calc_hit_point(ball_movement, LEFT_QUADRUPLE_STEP_SCENE_OBJECT),
+            _calc_hit_point(ball_movement, RIGHT_QUADRUPLE_STEP_SCENE_OBJECT),
+            _calc_hit_point(ball_movement, LEFT_TRIPLE_STEP_SCENE_OBJECT),
+            _calc_hit_point(ball_movement, RIGHT_TRIPLE_STEP_SCENE_OBJECT),
+            _calc_hit_point(ball_movement, LEFT_DOUBLE_STEP_SCENE_OBJECT),
+            _calc_hit_point(ball_movement, RIGHT_DOUBLE_STEP_SCENE_OBJECT),
+            _calc_hit_point(ball_movement, LEFT_SINGLE_STEP_SCENE_OBJECT),
+            _calc_hit_point(ball_movement, RIGHT_SINGLE_STEP_SCENE_OBJECT),
+        ],
+        axis=0,
+    )
+    return hit_point, scene_object
 
     # Get and return first object hit (argmin entry time)
-    lowest_entry_time_index = jnp.argmin(hit_points[:,0])
+    lowest_entry_time_index = jnp.argmin(hit_points[:, 0])
     hit_point = hit_points[lowest_entry_time_index]
-    # TODO Can I do this?
+
     scene_object = jax.lax.switch(
         lowest_entry_time_index,
         (
@@ -487,72 +661,99 @@ def _check_reflecting_obstacle_hits(
             lambda: RIGHT_WALL_SCENE_OBJECT.horizontal,
             lambda: BOTTOM_WALL_SCENE_OBJECT.horizontal,
             lambda: LEFT_WALL_SCENE_OBJECT.horizontal,
-        )
+            lambda: LEFT_INNER_WALL_SCENE_OBJECT.horizontal,
+            lambda: RIGHT_INNER_WALL_SCENE_OBJECT.horizontal,
+            lambda: LEFT_QUADRUPLE_STEP_SCENE_OBJECT.horizontal,
+            lambda: RIGHT_QUADRUPLE_STEP_SCENE_OBJECT.horizontal,
+            lambda: LEFT_TRIPLE_STEP_SCENE_OBJECT.horizontal,
+            lambda: RIGHT_TRIPLE_STEP_SCENE_OBJECT.horizontal,
+            lambda: LEFT_DOUBLE_STEP_SCENE_OBJECT.horizontal,
+            lambda: RIGHT_DOUBLE_STEP_SCENE_OBJECT.horizontal,
+            lambda: LEFT_SINGLE_STEP_SCENE_OBJECT.horizontal,
+            lambda: RIGHT_SINGLE_STEP_SCENE_OBJECT.horizontal,
+        ),
     )
     return hit_point, scene_object
 
 
 @jax.jit
-def _get_signed_ball_directions(
-    ball_direction
-) -> tuple[chex.Array, chex.Array]:
+def _get_signed_ball_directions(ball_direction) -> tuple[chex.Array, chex.Array]:
     x_sign = jnp.where(
-        jnp.logical_or(ball_direction == 1, ball_direction == 2),
-        jnp.array(1.),
-        jnp.array(-1.)
+        jnp.logical_or(ball_direction == 2, ball_direction == 3),
+        jnp.array(1.0),
+        jnp.array(-1.0),
     )
     y_sign = jnp.where(
-        jnp.logical_or(ball_direction == 0, ball_direction == 1),
-        jnp.array(1.),
-        jnp.array(-1.)
+        jnp.logical_or(ball_direction == 0, ball_direction == 2),
+        jnp.array(-1.0),
+        jnp.array(1.0),
     )
     return x_sign, y_sign
 
+
 @jax.jit
-def _get_ball_direction(
-    signed_vel_x,
-    signed_vel_y
-) -> chex.Array:
-    direction = jnp.where(
-        signed_vel_x > 0,
-        jnp.array(1.),
-        jnp.array(3.)
-    )
-    direction = jax.lax.cond(
-        signed_vel_y > 0,
-        lambda d: (d + 1) % 4,
-        lambda d: d,
-        operand=direction
-    )
-    return direction
+def _get_ball_direction(signed_vel_x, signed_vel_y) -> chex.Array:
+    # If both values are negative, we move closer to (0, 0) in the top left corner and fly in direction 0
+    top_left = jnp.logical_and(signed_vel_x <= 0, signed_vel_y <= 0)  # 0
+    top_right = jnp.logical_and(signed_vel_x > 0, signed_vel_y <= 0)  # 2
+    bottom_right = jnp.logical_and(signed_vel_x > 0, signed_vel_y > 0)  # 3
+    bottom_left = jnp.logical_and(signed_vel_x <= 0, signed_vel_y > 0)  # 1
+
+    bool_array = jnp.array([top_left, bottom_left, top_right, bottom_right])
+    return jnp.argmax(bool_array)
+
+
+@jax.jit
+def _calc_ball_change(ball_x, ball_y, ball_vel_x, ball_vel_y, ball_direction):
+    sign_x, sign_y = _get_signed_ball_directions(ball_direction)
+    ball_vel_x = jnp.clip(ball_vel_x, 0, BALL_MAX_SPEED)
+    ball_vel_y = jnp.clip(ball_vel_y, 0, BALL_MAX_SPEED)
+    signed_ball_vel_x = sign_x * ball_vel_x
+    signed_ball_vel_y = sign_y * ball_vel_y
+    # Only change position, direction and velocity if the ball is in play
+    # TODO override ball_x, ball_y if obstacle hit (_reflect_ball)
+    ball_x = ball_x + signed_ball_vel_x
+    ball_y = ball_y + signed_ball_vel_y
+    return ball_x, ball_y, ball_vel_x, ball_vel_y, signed_ball_vel_x, signed_ball_vel_y
 
 
 @jax.jit
 def ball_step(
     state: VideoPinballState,
     plunger_power,
-    ball_in_play,
     action,
 ):
     """
     Update the pinballs position and velocity based on the current state and action.
     """
-
+    ball_x = state.ball_x
+    ball_y = state.ball_y
     ball_vel_x = state.ball_vel_x
     ball_vel_y = state.ball_vel_y
     ball_direction = state.ball_direction
-
+    ball_in_play = state.ball_in_play
+    jax.debug.print(
+        "Ball Step, Initial Ball x {ball_x}, y , {ball_y}, vel_x {ball_vel_x}, vel_y {ball_vel_y}, direction {ball_direction}",
+        ball_x=ball_x,
+        ball_y=ball_y,
+        ball_vel_x=ball_vel_x,
+        ball_vel_y=ball_vel_y,
+        ball_direction=ball_direction,
+    )
     """
     Plunger calculation
     """
-    jax.debug.print("Initial {x} {y}", x=ball_vel_x, y=ball_vel_y)
-    # Add plunger power to the ball velocity, only set to non-zero value once fired
+    # Add plunger power to the ball velocity, only set to non-zero value once fired, reset after hitting invisible block
+    ball_direction = jnp.where(
+        plunger_power > 0,
+        jnp.array(0),
+        ball_direction,
+    )  # Set direction to 0 if the ball is fired
     ball_vel_y = jnp.where(
         plunger_power > 0,
         ball_vel_y + plunger_power,
         ball_vel_y,
     )
-    jax.debug.print("After plunger {x} {y}", x=ball_vel_x, y=ball_vel_y)
     """
     Flipper calculation
     """
@@ -565,28 +766,90 @@ def ball_step(
     # immediately deduct the gravity from the velocity
     # Direction has to be figured into the gravity calculation
     gravity_delta = jnp.where(
-        jnp.logical_or(ball_direction == 2, ball_direction == 3), GRAVITY, -GRAVITY
+        jnp.logical_or(ball_direction == 0, ball_direction == 2), -GRAVITY, GRAVITY
     )  # Subtract gravity if the ball is moving up otherwise add it
     ball_vel_y = ball_vel_y + gravity_delta
     ball_direction = jnp.where(
-        jnp.logical_and(ball_vel_y < 0, ball_direction == 0),
-        jnp.array(3),   # if ball direction was towards upper left
-        jnp.array(2)    # if ball direction was towards upper right
+        ball_vel_y < 0,
+        ball_direction + 1,  # if ball direction was towards upper left
+        ball_direction,
     )
     ball_vel_y = jnp.abs(ball_vel_y)
-    jax.debug.print("After gravity {x} {y}", x=ball_vel_x, y=ball_vel_y)
+    jax.debug.print(
+        "Ball Step, After Gravity Ball x {ball_x}, y , {ball_y}, vel_x {ball_vel_x}, vel_y {ball_vel_y}, direction {ball_direction}",
+        ball_x=ball_x,
+        ball_y=ball_y,
+        ball_vel_x=ball_vel_x,
+        ball_vel_y=ball_vel_y,
+        ball_direction=ball_direction,
+    )
+
     """
     Ball movement calculation observing its direction 
     """
+    ball_x, ball_y, ball_vel_x, ball_vel_y, signed_ball_vel_x, signed_ball_vel_y = (
+        _calc_ball_change(
+            state.ball_x, state.ball_y, ball_vel_x, ball_vel_y, ball_direction
+        )
+    )
+    jax.debug.print(
+        "Ball Step, After Ball Update x {ball_x}, y , {ball_y}, vel_x {ball_vel_x}, vel_y {ball_vel_y}, direction {ball_direction}",
+        ball_x=ball_x,
+        ball_y=ball_y,
+        ball_vel_x=ball_vel_x,
+        ball_vel_y=ball_vel_y,
+        ball_direction=ball_direction,
+    )
+    """
+    Check if the ball is hitting the invisible block at the plunger hole
+    """
+    ball_movement = BallMovement(
+        old_ball_x=state.ball_x,
+        old_ball_y=state.ball_y,
+        new_ball_x=ball_x,
+        new_ball_y=ball_y,
+    )
+    invisible_block_hit_data = _calc_hit_point(
+        ball_movement, INVISIBLE_BLOCK_SCENE_OBJECT
+    )
+    is_invisible_block_hit = jnp.logical_and(
+        jnp.logical_not(ball_in_play),
+        invisible_block_hit_data[0] != T_ENTRY_NO_COLLISION,
+    )
+    jax.debug.print(
+        "Ball Step, invisible ball hit {invis_ball_hit}, ball in play {bip}, plunger_power {pp}",
+        invis_ball_hit=is_invisible_block_hit,
+        bip=ball_in_play,
+        pp=plunger_power,
+    )
+    # set x vel to y vel and divide vel y by 5
+    ball_vel_x = jnp.where(
+        is_invisible_block_hit,
+        ball_vel_y,
+        ball_vel_x,
+    )
+    ball_vel_y = jnp.where(is_invisible_block_hit, ball_vel_y / 5, ball_vel_y)
+    # set ball_x, ball_y to below invisible element and proceed with new ball_movement
+    ball_x = jnp.where(
+        is_invisible_block_hit,
+        jnp.array(INVISIBLE_BLOCK_LEFT_X_OFFSET, dtype=jnp.float32),
+        ball_x,
+    )
+    ball_y = jnp.where(
+        is_invisible_block_hit,
+        jnp.array(INVISIBLE_BLOCK_TOP_Y_OFFSET, dtype=jnp.float32),
+        ball_y,
+    )
+    new_ball_direction = jnp.where(
+        (plunger_power // 2) % 2 == 0, 0, 1  # semi random y direction
+    )
+    ball_direction = jnp.where(
+        is_invisible_block_hit, new_ball_direction, ball_direction
+    )
     sign_x, sign_y = _get_signed_ball_directions(ball_direction)
     signed_ball_vel_x = sign_x * ball_vel_x
     signed_ball_vel_y = sign_y * ball_vel_y
-    jax.debug.print("Signed {x} {y}", x=ball_vel_x, y=ball_vel_y)
-    # Only change position, direction and velocity if the ball is in play
-    # TODO override ball_x, ball_y if obstacle hit (_reflect_ball)
-    ball_x = state.ball_x + signed_ball_vel_x
-    ball_y = state.ball_y + signed_ball_vel_y
-    jax.debug.print("Initial ball {x} {y}", x=ball_x, y=ball_y)
+    ball_in_play = jnp.logical_or(ball_in_play, is_invisible_block_hit)
 
     """
     Obstacle hit calculation
@@ -601,59 +864,70 @@ def ball_step(
         new_ball_x=ball_x,
         new_ball_y=ball_y,
     )
-    hit_point, scene_object_horizontal = _check_reflecting_obstacle_hits(ball_movement)
-    jax.debug.print("Hit point {x}", x=hit_point)
-    reflected_ball_x, reflected_ball_y, reflected_ball_vel_x, reflected_ball_vel_y = _reflect_ball(ball_movement, hit_point, scene_object_horizontal)
 
-    ball_x = jnp.where(
-        hit_point[0] == T_ENTRY_NO_COLLISION,
-        ball_x,
-        reflected_ball_x
+    hit_data, scene_object_horizontal = _check_reflecting_obstacle_hits(ball_movement)
+    # TODO what happens if the ball is reflected into another reflecting object => maybe a while-loop
+    reflected_ball_x, reflected_ball_y = _reflect_ball(
+        ball_movement, hit_data, scene_object_horizontal
     )
-    ball_y = jnp.where(
-        hit_point[0] == T_ENTRY_NO_COLLISION,
-        ball_y,
-        reflected_ball_y
+
+    # vector from hit point to end point of reflected trajectory
+    reflection_trajectory_x = reflected_ball_x - hit_data[1]
+    reflection_trajectory_y = reflected_ball_y - hit_data[2]
+
+    ball_x = jnp.where(hit_data[0] == T_ENTRY_NO_COLLISION, ball_x, reflected_ball_x)
+    ball_y = jnp.where(hit_data[0] == T_ENTRY_NO_COLLISION, ball_y, reflected_ball_y)
+    ball_trajectory_x = jnp.where(
+        hit_data[0] == T_ENTRY_NO_COLLISION, signed_ball_vel_x, reflection_trajectory_x
     )
-    signed_ball_vel_x = jnp.where(
-        hit_point[0] == T_ENTRY_NO_COLLISION,
-        ball_vel_x,
-        reflected_ball_vel_x
+    ball_trajectory_y = jnp.where(
+        hit_data[0] == T_ENTRY_NO_COLLISION, signed_ball_vel_y, reflection_trajectory_y
     )
-    signed_ball_vel_y = jnp.where(
-        hit_point[0] == T_ENTRY_NO_COLLISION,
-        ball_vel_y,
-        reflected_ball_vel_y
+    jax.debug.print(
+        "Signed Ball Vel y {signed_ball_vel_y}, Reflect Trajectory y {reflection_trajectory_y}",
+        signed_ball_vel_y=signed_ball_vel_y,
+        reflection_trajectory_y=reflection_trajectory_y,
     )
-    jax.debug.print("New Ball, velocity {x} {y} {z} {v}", x=ball_x, y=ball_y, z=signed_ball_vel_x, v=signed_ball_vel_y)
+    jax.debug.print(
+        "Ball Step, After Obstacle Update x {ball_x}, y , {ball_y}, vel_x {ball_vel_x}, vel_y {ball_vel_y}, direction {ball_direction}",
+        ball_x=ball_x,
+        ball_y=ball_y,
+        ball_vel_x=ball_vel_x,
+        ball_vel_y=ball_vel_y,
+        ball_direction=ball_direction,
+    )
 
     """
     Some final calculations
     """
+    jax.debug.print(
+        "Ball Trajectory x, Ball Trajectory y {ball_trajectory_x}, {ball_trajectory_y}",
+        ball_trajectory_x=ball_trajectory_x,
+        ball_trajectory_y=ball_trajectory_y,
+    )
+    ball_direction = _get_ball_direction(ball_trajectory_x, ball_trajectory_y)
     # Clip the ball velocity to the maximum speed
     ball_vel_x = jnp.clip(jnp.abs(signed_ball_vel_x), 0, BALL_MAX_SPEED)
     ball_vel_y = jnp.clip(jnp.abs(signed_ball_vel_y), 0, BALL_MAX_SPEED)
-    ball_direction = _get_ball_direction(signed_ball_vel_x, signed_ball_vel_y)
 
     """
     Check if ball is in play if not ignore the calculations
     """
     # TODO: Maybe do the stuff above in a function that is called if we are in play
-    jax.debug.print("Ball in play {x}", x=ball_in_play)
-    ball_direction = jnp.where(ball_in_play, ball_direction, BALL_START_DIRECTION)
-    ball_x = jnp.where(ball_in_play, ball_x, BALL_START_X)
-    ball_y = jnp.where(ball_in_play, ball_y, BALL_START_Y)
-    ball_vel_x = jnp.where(ball_in_play, ball_vel_x, jnp.array(0.))
-    ball_vel_y = jnp.where(ball_in_play, ball_vel_y, jnp.array(0.))
-    
-    jax.debug.print("Final {x} {y}", x=ball_vel_x, y=ball_vel_y)
-    return (
-        ball_x,
-        ball_y,
-        ball_direction,
-        ball_vel_x,
-        ball_vel_y,
+    # ball_direction = jnp.where(ball_in_play, ball_direction, BALL_START_DIRECTION)
+    # ball_x = jnp.where(ball_in_play, ball_x, BALL_START_X)
+    # ball_y = jnp.where(ball_in_play, ball_y, BALL_START_Y)
+    # ball_vel_x = jnp.where(ball_in_play, ball_vel_x, jnp.array(0.0))
+    # ball_vel_y = jnp.where(ball_in_play, ball_vel_y, jnp.array(0.0))
+    jax.debug.print(
+        "Ball Step, Final Ball x {ball_x}, y , {ball_y}, vel_x {ball_vel_x}, vel_y {ball_vel_y}, direction {ball_direction}",
+        ball_x=ball_x,
+        ball_y=ball_y,
+        ball_vel_x=ball_vel_x,
+        ball_vel_y=ball_vel_y,
+        ball_direction=ball_direction,
     )
+    return (ball_x, ball_y, ball_direction, ball_vel_x, ball_vel_y, ball_in_play)
 
 
 @jax.jit
@@ -662,7 +936,7 @@ def _reset_ball(state: VideoPinballState):
     When the ball goes into the gutter or into the plunger hole,
     respawn the ball on the launcher.
     """
-    return BALL_START_X, BALL_START_Y, 0, 0
+    return BALL_START_X, BALL_START_Y, jnp.array(0.0), jnp.array(0.0)
 
 
 class JaxVideoPinball(
@@ -691,14 +965,15 @@ class JaxVideoPinball(
         Returns the initial state and the reward (i.e. 0)
         """
         state = VideoPinballState(
-            ball_x=jnp.array(BALL_START_X).astype(jnp.int32),
-            ball_y=jnp.array(BALL_START_Y).astype(jnp.int32),
-            ball_vel_x=jnp.array(0.),
-            ball_vel_y=jnp.array(0.),
+            ball_x=jnp.array(BALL_START_X).astype(jnp.float32),
+            ball_y=jnp.array(BALL_START_Y).astype(jnp.float32),
+            ball_vel_x=jnp.array(0.0),
+            ball_vel_y=jnp.array(0.0),
             ball_direction=jnp.array(0).astype(jnp.int32),
             left_flipper_angle=jnp.array(0).astype(jnp.int32),
             right_flipper_angle=jnp.array(0).astype(jnp.int32),
             plunger_position=jnp.array(0).astype(jnp.int32),
+            plunger_power=jnp.array(0).astype(jnp.float32),
             score=jnp.array(0).astype(jnp.int32),
             lives=jnp.array(1).astype(jnp.int32),
             bonus_multiplier=jnp.array(1).astype(jnp.int32),
@@ -720,27 +995,40 @@ class JaxVideoPinball(
         # Probably best to use it instead of simply jnp.array
 
         # Step 1: Update Plunger and Flippers
-        plunger_position, plunger_power = plunger_step(state, action)
-        jax.debug.print("Plunger Power/Position {x}/{y}", x=plunger_power, y=plunger_position)
+        plunger_position, new_plunger_power = plunger_step(state, action)
+        # Update plunger power only if it is > 0
+        plunger_power = jax.lax.cond(
+            new_plunger_power > 0,
+            lambda x: x,
+            lambda _: state.plunger_power,
+            operand=new_plunger_power,
+        )
         left_flipper_angle, right_flipper_angle = flipper_step(state, action)
 
+        # Print new_plunger_power and plunger_power
+        jax.debug.print(
+            "Plunger Step, Plunger Power {plunger_power}, New Plunger Power {new_plunger_power}",
+            plunger_power=plunger_power,
+            new_plunger_power=new_plunger_power,
+        )
+
         # Step 2: Update ball position and velocity
-        ball_in_play = jnp.logical_or(state.ball_in_play, plunger_power > 0)
-        jax.debug.print("Ball in play after plunger {x}", x=ball_in_play)
-        ball_x, ball_y, ball_direction, ball_vel_x, ball_vel_y = ball_step(
-            state, plunger_power, ball_in_play, action, 
+        ball_x, ball_y, ball_direction, ball_vel_x, ball_vel_y, ball_in_play = (
+            ball_step(
+                state,
+                new_plunger_power,
+                action,
+            )
         )
 
         # Step 3: Check if ball is in the gutter or in plunger hole
-        ball_in_gutter = ball_y > 192
+        ball_in_gutter = ball_y > 209
         # TODO if ball is back in plunger hole reset, not instantly
         ball_reset = ball_in_gutter
-        #ball_reset = jnp.logical_or(
-        #    ball_in_gutter,
-        #    jnp.logical_and(
-        #        jnp.logical_and(ball_x > 148, ball_y > 128), ball_in_play
-        #    ),
-        #)
+        ball_reset = jnp.logical_or(
+            ball_in_gutter,
+            jnp.logical_and(ball_x > 148, ball_y > 129),
+        )
 
         # Step 4: Update scores
         score = jnp.array(0).astype(jnp.int32)
@@ -752,10 +1040,10 @@ class JaxVideoPinball(
 
         # Step 5: Reset ball if it went down the gutter
         current_values = (
-            ball_x.astype(jnp.int32),
-            ball_y.astype(jnp.int32),
-            ball_vel_x.astype(jnp.int32),
-            ball_vel_y.astype(jnp.int32),
+            ball_x,
+            ball_y,
+            ball_vel_x,
+            ball_vel_y,
         )
         ball_x_final, ball_y_final, ball_vel_x_final, ball_vel_y_final = jax.lax.cond(
             ball_reset,
@@ -767,7 +1055,8 @@ class JaxVideoPinball(
 
         lives = jax.lax.cond(
             ball_in_gutter,
-            lambda x: x + 1,  # Because it's not really lives but more like a ball count? You start at 1 and it goes up to 3
+            lambda x: x
+            + 1,  # Because it's not really lives but more like a ball count? You start at 1 and it goes up to 3
             lambda x: x,
             operand=state.lives,
         )
@@ -781,6 +1070,7 @@ class JaxVideoPinball(
             left_flipper_angle=left_flipper_angle,
             right_flipper_angle=right_flipper_angle,
             plunger_position=plunger_position,
+            plunger_power=plunger_power,
             score=score,
             lives=lives,
             bonus_multiplier=bonus_multiplier,
@@ -806,7 +1096,7 @@ class JaxVideoPinball(
         #     observation,
         # )
         # new_state = new_state._replace(obs_stack=observation)
-
+        jax.debug.print("------------------------------------------")
         return observation, new_state, env_reward, done, info
 
     @partial(jax.jit, static_argnums=(0,))
@@ -1231,12 +1521,22 @@ class Renderer_AtraJaxisVideoPinball:
         frame_flipper_left = aj.get_sprite_frame(
             self.sprites["flipper_left"], state.left_flipper_angle
         )
-        raster = aj.render_at(raster, 64, 184 - FLIPPER_ANIMATION_Y_OFFSETS[state.left_flipper_angle], frame_flipper_left)
+        raster = aj.render_at(
+            raster,
+            64,
+            184 - FLIPPER_ANIMATION_Y_OFFSETS[state.left_flipper_angle],
+            frame_flipper_left,
+        )
 
         frame_flipper_right = aj.get_sprite_frame(
             self.sprites["flipper_right"], state.right_flipper_angle
         )
-        raster = aj.render_at(raster, 83 + FLIPPER_ANIMATION_X_OFFSETS[state.right_flipper_angle], 184 - FLIPPER_ANIMATION_Y_OFFSETS[state.right_flipper_angle], frame_flipper_right)
+        raster = aj.render_at(
+            raster,
+            83 + FLIPPER_ANIMATION_X_OFFSETS[state.right_flipper_angle],
+            184 - FLIPPER_ANIMATION_Y_OFFSETS[state.right_flipper_angle],
+            frame_flipper_right,
+        )
 
         frame_plunger = aj.get_sprite_frame(
             self.sprites["plunger"], state.plunger_position
