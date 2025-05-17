@@ -178,6 +178,7 @@ class BallMovement:
     new_ball_x: chex.Array
     new_ball_y: chex.Array
 
+
 @chex.dataclass
 class SceneObject:
     hit_box_matrix: chex.Array
@@ -648,7 +649,6 @@ def _check_reflecting_obstacle_hits(
         ],
         axis=0,
     )
-    return hit_point, scene_object
 
     # Get and return first object hit (argmin entry time)
     lowest_entry_time_index = jnp.argmin(hit_points[:, 0])
@@ -1077,7 +1077,7 @@ class JaxVideoPinball(
             bumpers_active=bumpers_active,
             targets_hit=targets_hit,
             step_counter=jnp.array(state.step_counter + 1).astype(jnp.int32),
-            ball_in_play=ball_in_play,  # Necessary?
+            ball_in_play=ball_in_play,
             # obs_stack=None,
         )
 
