@@ -2,6 +2,7 @@ import numpy as np
 import pygame
 import gymnasium as gym
 import ale_py
+import pandas as pd
 from ale_py._ale_py import ALEInterface
 from tqdm import tqdm
 from collections import deque
@@ -32,7 +33,7 @@ class Renderer:
     ale: ALEInterface
 
     # Add render_scale and screenshot_dir parameters
-    def __init__(self, env_name, no_render=[], render_scale=4, screenshot_dir=None):
+    def __init__(self, env_name, no_render=[], render_scale=4, screenshot_dir=None, ram_cell_info_csv=None):
         self.render_scale = render_scale # Store the desired scale factor
         self.screenshot_dir = screenshot_dir # Store screenshot directory
         # self.frame_counter = 1 # Initialize frame counter to 1 initially
@@ -77,8 +78,60 @@ class Renderer:
 
             # --- End of logic to find the next frame counter ---
         else:
-            self.frame_counter = 1 # If screenshot_dir is None or creation failed, start from 1
+            self.frame_counter = (
+                1  # If screenshot_dir is None or creation failed, start from 1
+            )
 
+        # Read rame cell info from CSV if provided
+        if ram_cell_info_csv is not None:
+            try:
+                ram_cell_info_dataframe = pd.read_csv(ram_cell_info_csv)
+                # Ensure the CSV has the expected columns
+                if not all(
+                    col in ram_cell_info_dataframe.columns
+                    for col in ["Register", "Description", "Values"]
+                ):
+                    raise ValueError(
+                        "CSV must contain 'Register', 'Description', and 'Values' columns."
+                    )
+
+                # Convert to a dictionary for easier access, with Register as key and (Description, Values) as value (both may be empty strings)
+                self.ram_cell_info = {
+                    int(row["Register"]): (
+                        row["Name"],
+                        row["Description"],
+                        row["Values"],
+                    )
+                    for _, row in ram_cell_info_dataframe.iterrows()
+                }
+                self.ram_cell_names = {
+                    int(row["Register"]): row["Name"]
+                    for _, row in ram_cell_info_dataframe.iterrows()
+                    if "Name" in row
+                    and isinstance(row["Name"], str)
+                    and row["Name"].strip() != ""
+                }
+                self.ram_cell_descriptions = {
+                    int(row["Register"]): row["Description"]
+                    for _, row in ram_cell_info_dataframe.iterrows()
+                    if "Description" in row
+                    and isinstance(row["Description"], str)
+                    and row["Description"].strip() != ""
+                }
+                self.ram_cell_values = {
+                    int(row["Register"]): row["Values"]
+                    for _, row in ram_cell_info_dataframe.iterrows()
+                    if "Values" in row
+                    and isinstance(row["Values"], str)
+                    and row["Values"].strip() != ""
+                }
+                print(f"Loaded RAM cell info from {ram_cell_info_csv}")
+            except Exception as e:
+                print(f"Error loading RAM cell info from CSV: {e}")
+                self.ram_cell_info = None
+        else:
+            self.ram_cell_info = None
+            print("No RAM cell info CSV provided, using default rendering.")
 
         try:
             self.env = gym.make(
@@ -485,6 +538,14 @@ class Renderer:
                      elif not self.ale: print("Cannot save state, ALE not available.")
                      elif not self.paused: print("Pause the game ('P') before saving state ('C').")
 
+                elif event.key == pygame.K_h:  # Enable Hover Over RAM Info
+                    self.hover_ram_info_enabled = not getattr(
+                        self, "hover_ram_info_enabled", False
+                    )
+                    print(
+                        f"{'Enabled' if self.hover_ram_info_enabled else 'Disabled'} Hover Over RAM Info"
+                    )
+
                 # --- Add Key Binding for Save Frame ('S') ---
                 elif event.key == pygame.K_s:
                     print("Save frame key pressed. Calling save_frame...")
@@ -601,6 +662,7 @@ class Renderer:
         is_red = cell_idx in self.red_render
         has_delta = cell_idx in self.delta_render
         is_clicked = cell_idx in self.clicked_cells
+        has_cell_name = cell_idx in self.ram_cell_names.keys()
 
         x, y, w, h = self._get_ram_cell_rect(cell_idx)
 
@@ -618,7 +680,13 @@ class Renderer:
         id_color = (100, 150, 150)
         if is_active: id_color = (150, 150, 30)
         elif is_candidate: id_color = (20, 60, 200)
-        text = self.ram_cell_id_font.render(str(cell_idx), True, id_color, None)
+        cell_text = f"{cell_idx:03d}"  # Format cell index as 3-digit number
+        if has_cell_name:
+            cell_name = self.ram_cell_names.get(cell_idx, "")
+            if cell_name:
+                cell_text += f"  {cell_name[:10]}"  # Show first 10 chars of name
+
+        text = self.ram_cell_id_font.render(cell_text, True, id_color, None)
         text_rect = text.get_rect(); text_rect.topleft = (x + 3, y + 3)
         self.window.blit(text, text_rect)
 
@@ -651,9 +719,68 @@ class Renderer:
         h = self.effective_ram_cell_height
         return x, y, w, h
 
+    def _render_hover_over_cell_info(self, cell_idx: int, rect_data: tuple):
+        x, y, w, h = rect_data
+        description = self.ram_cell_descriptions.get(
+            cell_idx, "No description available"
+        )
+        description += "\n\n" + self.ram_cell_values.get(
+            cell_idx, "No values info available"
+        )
+        font = pygame.font.SysFont("Arial", 16)
+        description_lines = description.splitlines()
+        max_line_length = max(len(line) for line in description_lines)
+
+        # Calculate the width of the hover box based on the longest line
+        hover_box_width = max(
+            5 * w, max_line_length * 10 + 20
+        )  # 10 pixels per char + padding
+        hover_box_height = (
+            2 * h + len(description_lines) * 20 + 10
+        )  # 20 pixels per line + padding
+
+        # Render the hover box with the calculated size
+        hover_surface = pygame.Surface((hover_box_width, hover_box_height))
+        hover_surface.set_alpha(230)
+        hover_surface.fill((255, 255, 255))
+
+        # Render above if there is enough space, otherwise render below
+        if y - hover_box_height > 0:
+            y_render = y - hover_box_height - 5
+        else:
+            y_render = y + h + 5
+
+        # Same for x, if there is enough space to the right,
+        # start at right edge and let the box extend left
+        if (
+            x + hover_box_width
+            > self.game_display_width + self.effective_ram_render_width
+        ):
+            x_render = x + w - hover_box_width
+        else:
+            x_render = x
+        self.window.blit(hover_surface, (x_render, y_render))
+
+        # Render the description text in the hover box
+        for i, line in enumerate(description_lines):
+            text = font.render(line, True, (0, 0, 0))
+            text_rect = text.get_rect()
+            text_rect.topleft = (x_render + 10, y_render + 10 + i * 20)
+            self.window.blit(text, text_rect)
 
     def _render_hover(self):
         cell_idx = self._get_cell_under_mouse()
+
+        # On Hover - Render a translucent box above the RAM cell and show description in it
+        # Provided hover_ram_info_enabled is set (toggle with 'H' key)
+        hover_ram_info_enabled = getattr(self, "hover_ram_info_enabled", False)
+        if hover_ram_info_enabled and (
+            cell_idx in self.ram_cell_descriptions or cell_idx in self.ram_cell_values
+        ):
+            rect_data = self._get_ram_cell_rect(cell_idx)
+            x, y, w, h = rect_data
+            self._render_hover_over_cell_info(cell_idx, rect_data)
+
         if cell_idx is not None and cell_idx != self.active_cell_idx:
             x, y, w, h = self._get_ram_cell_rect(cell_idx)
             hover_surface = pygame.Surface((w, h))
@@ -705,7 +832,19 @@ if __name__ == "__main__":
     parser.add_argument("-nr", "--no_render", type=int, default=[], nargs="+", help="List of RAM cell indices (0-127) to hide.")
     parser.add_argument("-nra", "--no_render_all", action="store_true", help="Hide all RAM cells.")
     # Add screenshot-dir argument
-    parser.add_argument('--screenshot-dir', type=str, default=None, help='Directory to save screenshots as .npy files (optional)')
+    parser.add_argument(
+        "--screenshot-dir",
+        type=str,
+        default=None,
+        help="Directory to save screenshots as .npy files (optional)",
+    )
+    # Add RAM cell info argument
+    parser.add_argument(
+        "-rc",
+        "--ram_cell_info",
+        default=None,
+        help="Display RAM cell name and values on hover.",
+    )
 
     args = parser.parse_args()
 
@@ -718,7 +857,13 @@ if __name__ == "__main__":
         args.no_render = list(range(128))
 
     # Pass scale and screenshot_dir arguments to Renderer
-    renderer = Renderer(env_name=args.game, no_render=args.no_render, render_scale=args.scale, screenshot_dir=args.screenshot_dir)
+    renderer = Renderer(
+        env_name=args.game,
+        no_render=args.no_render,
+        render_scale=args.scale,
+        screenshot_dir=args.screenshot_dir,
+        ram_cell_info_csv=args.ram_cell_info,
+    )
 
     if args.load_state:
         if renderer.ale:
